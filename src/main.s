@@ -12,12 +12,13 @@
 .global main
 .type main,%function 
 main:
+    push {LR}
     ldr R0,=misDatos
     movs R1,#32
+    movs R2,#1
     bl punto4
-idle:
-    wfi
-    b idle
+    pop {LR}
+    bx LR
 .size main, . - main
 
 
@@ -25,17 +26,25 @@ idle:
 .global punto4
 .type punto4,%function
 punto4:
-    // R0: dirección datos, R1: cantidad datos
-    // Sacar R1 bytes por PA0..PA7, manteniendo cada byte 1ms
-    push {R4-R6,LR}
+    // R0: dirección datos, R1: cantidad datos, R2:tiempo
+    // Sacar R1 bytes por PA0..PA7, manteniendo cada byte R2 ms
+    push {R4-R7,LR}
     movs R4,R0
     movs R5,R1
-    movs R6,#0 // contador
+    movs R6,R2
+    movs R7,#0 // contador
     bl inicializa_puerto_a
     bl inicializar_systick
 0:
-    
-    pop {R4-R6,PC}
+    ldrb R0,[R4,R7]
+    bl extraer_dato
+    movs R0,R6
+    bl delay_ms
+    adds R7,#1
+1:
+    cmp R7,R5
+    bne 0b 
+    pop {R4-R7,PC}
 .size punto4, . - punto4
 
 .set RCC_base, 0x40021000
@@ -86,6 +95,28 @@ delay_1ms:
     ldr R1,[R0,#SYST_CSR]
     tst R1,#SYST_CSR_Coutflag_mask
     beq 0b
+    bx lr
+delay_ms:
+    // R0: cantidad ms
+    push {R4,LR}
+    movs R4,R0
+    b 1f
+0:
+    bl delay_1ms
+    subs R4,#1
+1:
+    cmp R4,#0
+    bne 0b
+    pop {R4,PC}
+.set ODR,0x0C
+.set BSRR,0x10
+
+extraer_dato:
+    // R0: dato (1 byte)
+    ldr R1,=GPIOA_base
+    mvns R2,R0
+    bfi R0,R2,#16,#8
+    str R0,[R1,#BSRR]
     bx lr
 .pool
 misDatos:
